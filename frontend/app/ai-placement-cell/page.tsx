@@ -1,6 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import type React from "react"
+
+import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,13 +11,43 @@ import { Badge } from "@/components/ui/badge"
 import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Briefcase, Building, Calendar, ChevronDown, Filter, MapPin, Sparkles, Star, X } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Briefcase,
+  Building,
+  Calendar,
+  ChevronDown,
+  Filter,
+  FileText,
+  MapPin,
+  Sparkles,
+  Star,
+  Upload,
+  X,
+  Trash2,
+  Eye,
+  FileUp,
+  CheckCircle,
+  Loader2,
+  Send,
+} from "lucide-react"
 import Navbar from "@/components/navbar"
 import Footer from "@/components/footer"
 import EnhancedBackground from "@/components/enhanced-background"
 import { useMouse } from "@/hooks/use-mouse"
 import ScrollProgress from "@/components/scroll-progress"
 import { cn } from "@/lib/utils"
+import { Progress } from "@/components/ui/progress"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog"
 
 interface Opportunity {
   id: string
@@ -32,6 +64,14 @@ interface Opportunity {
   isReachedOut?: boolean
 }
 
+interface Resume {
+  name: string
+  size: number
+  type: string
+  lastModified: number
+  url: string
+}
+
 export default function AIPlacementCellPage() {
   const { mousePosition } = useMouse()
   const [scrollY, setScrollY] = useState(0)
@@ -40,21 +80,37 @@ export default function AIPlacementCellPage() {
   const [matchFilter, setMatchFilter] = useState([0, 100])
   const [probabilityFilter, setProbabilityFilter] = useState([0, 100])
   const [showReachedOutOnly, setShowReachedOutOnly] = useState(false)
+  const [resume, setResume] = useState<Resume | null>(null)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [isUploading, setIsUploading] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [showAllActivities, setShowAllActivities] = useState(false)
+  const [applicationDialogOpen, setApplicationDialogOpen] = useState(false)
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null)
+  const [isSubmittingApplication, setIsSubmittingApplication] = useState(false)
+  const [applicationForm, setApplicationForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    coverLetter: "",
+    availability: "Immediate",
+    expectedSalary: "",
+  })
 
-  // Sample data
-  const [opportunities, setOpportunities] = useState<Opportunity[]>([
+  // Sample data - initial opportunities before resume upload
+  const initialOpportunities: Opportunity[] = [
     {
       id: "1",
       title: "Frontend Developer",
       company: "TechCorp",
       location: "Bangalore, India",
       type: "Full-time",
-      matchScore: 92,
-      selectionProbability: 78,
+      matchScore: 65,
+      selectionProbability: 48,
       postedDate: "2023-04-20",
       logo: "/abstract-tc.png",
       skills: ["React", "TypeScript", "Tailwind CSS"],
-      status: "in-progress",
     },
     {
       id: "2",
@@ -62,12 +118,11 @@ export default function AIPlacementCellPage() {
       company: "AI Solutions",
       location: "Remote",
       type: "Full-time",
-      matchScore: 88,
-      selectionProbability: 65,
+      matchScore: 58,
+      selectionProbability: 42,
       postedDate: "2023-04-18",
       logo: "/abstract-ai-network.png",
       skills: ["Python", "TensorFlow", "PyTorch"],
-      status: "accepted",
       isReachedOut: true,
     },
     {
@@ -76,12 +131,11 @@ export default function AIPlacementCellPage() {
       company: "DataWorks",
       location: "Hyderabad, India",
       type: "Full-time",
-      matchScore: 85,
-      selectionProbability: 72,
+      matchScore: 52,
+      selectionProbability: 45,
       postedDate: "2023-04-15",
       logo: "/abstract-dw.png",
       skills: ["Python", "SQL", "Data Visualization"],
-      status: "rejected",
     },
     {
       id: "4",
@@ -89,8 +143,8 @@ export default function AIPlacementCellPage() {
       company: "ServerStack",
       location: "Delhi, India",
       type: "Full-time",
-      matchScore: 79,
-      selectionProbability: 68,
+      matchScore: 60,
+      selectionProbability: 50,
       postedDate: "2023-04-12",
       logo: "/stylized-letter-ss.png",
       skills: ["Node.js", "Express", "MongoDB"],
@@ -102,8 +156,8 @@ export default function AIPlacementCellPage() {
       company: "DesignHub",
       location: "Mumbai, India",
       type: "Contract",
-      matchScore: 76,
-      selectionProbability: 60,
+      matchScore: 48,
+      selectionProbability: 40,
       postedDate: "2023-04-10",
       logo: "/intertwined-letters.png",
       skills: ["Figma", "Adobe XD", "User Research"],
@@ -114,12 +168,11 @@ export default function AIPlacementCellPage() {
       company: "CloudTech",
       location: "Pune, India",
       type: "Full-time",
-      matchScore: 72,
-      selectionProbability: 55,
+      matchScore: 55,
+      selectionProbability: 47,
       postedDate: "2023-04-08",
       logo: "/computed-tomography-scan.png",
       skills: ["Docker", "Kubernetes", "AWS"],
-      isReachedOut: true,
     },
     {
       id: "7",
@@ -127,13 +180,115 @@ export default function AIPlacementCellPage() {
       company: "AppWorks",
       location: "Chennai, India",
       type: "Full-time",
-      matchScore: 68,
-      selectionProbability: 50,
+      matchScore: 62,
+      selectionProbability: 44,
       postedDate: "2023-04-05",
       logo: "/abstract-geometric-aw.png",
       skills: ["React Native", "Flutter", "Swift"],
     },
-  ])
+  ]
+
+  // Enhanced opportunities after resume upload
+  const enhancedOpportunities: Opportunity[] = [
+    {
+      id: "1",
+      title: "Senior Frontend Developer",
+      company: "TechCorp",
+      location: "Bangalore, India",
+      type: "Full-time",
+      matchScore: 92,
+      selectionProbability: 78,
+      postedDate: "2023-04-20",
+      logo: "/abstract-tc.png",
+      skills: ["React", "TypeScript", "Tailwind CSS", "Next.js"],
+    },
+    {
+      id: "2",
+      title: "AI/ML Engineer",
+      company: "AI Solutions",
+      location: "Remote",
+      type: "Full-time",
+      matchScore: 88,
+      selectionProbability: 65,
+      postedDate: "2023-04-18",
+      logo: "/abstract-ai-network.png",
+      skills: ["Python", "TensorFlow", "PyTorch", "Deep Learning"],
+      isReachedOut: true,
+    },
+    {
+      id: "3",
+      title: "Lead Data Scientist",
+      company: "DataWorks",
+      location: "Hyderabad, India",
+      type: "Full-time",
+      matchScore: 85,
+      selectionProbability: 72,
+      postedDate: "2023-04-15",
+      logo: "/abstract-dw.png",
+      skills: ["Python", "SQL", "Data Visualization", "Machine Learning"],
+    },
+    {
+      id: "4",
+      title: "Full Stack Developer",
+      company: "ServerStack",
+      location: "Delhi, India",
+      type: "Full-time",
+      matchScore: 79,
+      selectionProbability: 68,
+      postedDate: "2023-04-12",
+      logo: "/stylized-letter-ss.png",
+      skills: ["Node.js", "Express", "MongoDB", "React"],
+      isReachedOut: true,
+    },
+    {
+      id: "5",
+      title: "Senior UX/UI Designer",
+      company: "DesignHub",
+      location: "Mumbai, India",
+      type: "Contract",
+      matchScore: 76,
+      selectionProbability: 60,
+      postedDate: "2023-04-10",
+      logo: "/intertwined-letters.png",
+      skills: ["Figma", "Adobe XD", "User Research", "Design Systems"],
+    },
+    {
+      id: "6",
+      title: "DevOps Architect",
+      company: "CloudTech",
+      location: "Pune, India",
+      type: "Full-time",
+      matchScore: 72,
+      selectionProbability: 55,
+      postedDate: "2023-04-08",
+      logo: "/computed-tomography-scan.png",
+      skills: ["Docker", "Kubernetes", "AWS", "CI/CD"],
+      isReachedOut: true,
+    },
+    {
+      id: "7",
+      title: "Lead Mobile Developer",
+      company: "AppWorks",
+      location: "Chennai, India",
+      type: "Full-time",
+      matchScore: 68,
+      selectionProbability: 50,
+      postedDate: "2023-04-05",
+      logo: "/abstract-geometric-aw.png",
+      skills: ["React Native", "Flutter", "Swift", "Mobile Architecture"],
+    },
+  ]
+
+  // State to track opportunities
+  const [opportunities, setOpportunities] = useState<Opportunity[]>(initialOpportunities)
+
+  // Stats for the dashboard
+  const [stats, setStats] = useState({
+    rejections: 0,
+    acceptances: 0,
+    inProgress: 0,
+    applications: 0,
+  })
 
   useEffect(() => {
     const handleScroll = () => {
@@ -143,6 +298,34 @@ export default function AIPlacementCellPage() {
     window.addEventListener("scroll", handleScroll)
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
+
+  // Update stats based on opportunities
+  useEffect(() => {
+    setStats({
+      rejections: opportunities.filter((o) => o.status === "rejected").length,
+      acceptances: opportunities.filter((o) => o.status === "accepted").length,
+      inProgress: opportunities.filter((o) => o.status === "in-progress").length,
+      applications: opportunities.filter((o) => o.status).length,
+    })
+  }, [opportunities])
+
+  // Simulate upload progress
+  useEffect(() => {
+    if (isUploading) {
+      const interval = setInterval(() => {
+        setUploadProgress((prev) => {
+          if (prev >= 100) {
+            setIsUploading(false)
+            clearInterval(interval)
+            return 100
+          }
+          return prev + 10
+        })
+      }, 300)
+
+      return () => clearInterval(interval)
+    }
+  }, [isUploading])
 
   // Filter opportunities based on current filters
   const filteredOpportunities = opportunities.filter((opportunity) => {
@@ -158,11 +341,121 @@ export default function AIPlacementCellPage() {
   // Get opportunities where company reached out
   const reachedOutOpportunities = opportunities.filter((opportunity) => opportunity.isReachedOut)
 
-  // Stats for the dashboard
-  const stats = {
-    rejections: opportunities.filter((o) => o.status === "rejected").length,
-    acceptances: opportunities.filter((o) => o.status === "accepted").length,
-    inProgress: opportunities.filter((o) => o.status === "in-progress").length,
+  // Handle file upload
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Only accept PDF files
+    if (file.type !== "application/pdf") {
+      alert("Please upload a PDF file")
+      return
+    }
+
+    setIsUploading(true)
+    setUploadProgress(0)
+
+    // Simulate file upload and processing
+    setTimeout(() => {
+      const fileUrl = URL.createObjectURL(file)
+      setResume({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        lastModified: file.lastModified,
+        url: fileUrl,
+      })
+
+      // Update opportunities with enhanced matches based on resume
+      setOpportunities(enhancedOpportunities)
+
+      setIsUploading(false)
+      setUploadProgress(100)
+
+      // Show success message
+      alert("Resume uploaded successfully! Job matches have been updated based on your profile.")
+    }, 2000)
+  }
+
+  // Format file size
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + " bytes"
+    else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB"
+    else return (bytes / 1048576).toFixed(1) + " MB"
+  }
+
+  // Delete resume
+  const handleDeleteResume = () => {
+    if (resume?.url) {
+      URL.revokeObjectURL(resume.url)
+    }
+    setResume(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+
+    // Reset opportunities to initial state
+    setOpportunities(initialOpportunities)
+  }
+
+  // Trigger file input click
+  const triggerFileInput = () => {
+    fileInputRef.current?.click()
+  }
+
+  // Handle opening application dialog
+  const handleOpenApplicationDialog = (jobId: string) => {
+    if (!resume) {
+      alert("Please upload your resume before applying")
+      setActiveTab("resume")
+      return
+    }
+
+    setCurrentJobId(jobId)
+    setApplicationDialogOpen(true)
+  }
+
+  // Handle application form input changes
+  const handleApplicationFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
+    setApplicationForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }))
+  }
+
+  // Handle application form submission
+  const handleSubmitApplication = (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!currentJobId) return
+
+    setIsSubmittingApplication(true)
+
+    // Simulate form submission
+    setTimeout(() => {
+      // Update job status to in-progress
+      setOpportunities(opportunities.map((job) => (job.id === currentJobId ? { ...job, status: "in-progress" } : job)))
+
+      setIsSubmittingApplication(false)
+      setApplicationDialogOpen(false)
+
+      // Reset form
+      setApplicationForm({
+        name: "",
+        email: "",
+        phone: "",
+        coverLetter: "",
+        availability: "Immediate",
+        expectedSalary: "",
+      })
+
+      // Show success message
+      alert("Application submitted successfully!")
+
+      // Switch to dashboard to see updated stats
+      setActiveTab("dashboard")
+    }, 1500)
   }
 
   return (
@@ -188,7 +481,7 @@ export default function AIPlacementCellPage() {
           </motion.div>
 
           <Tabs defaultValue="dashboard" value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid grid-cols-2 mb-8">
+            <TabsList className="grid grid-cols-3 mb-8">
               <TabsTrigger value="dashboard" className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4" />
                 <span>Dashboard</span>
@@ -196,6 +489,10 @@ export default function AIPlacementCellPage() {
               <TabsTrigger value="opportunities" className="flex items-center gap-2">
                 <Briefcase className="h-4 w-4" />
                 <span>Opportunities</span>
+              </TabsTrigger>
+              <TabsTrigger value="resume" className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                <span>Resume</span>
               </TabsTrigger>
             </TabsList>
 
@@ -216,6 +513,7 @@ export default function AIPlacementCellPage() {
                         {opportunities
                           .filter((o) => o.status)
                           .sort((a, b) => new Date(b.postedDate).getTime() - new Date(a.postedDate).getTime())
+                          .slice(0, showAllActivities ? undefined : 3) // Show only 3 recent activities initially
                           .map((opportunity) => (
                             <div
                               key={opportunity.id}
@@ -257,6 +555,30 @@ export default function AIPlacementCellPage() {
                               </div>
                             </div>
                           ))}
+
+                        {/* View More / View Less button */}
+                        {opportunities.filter((o) => o.status).length > 3 && (
+                          <div className="text-center mt-4">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setShowAllActivities(!showAllActivities)}
+                              className="border-purple-500/50 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30"
+                            >
+                              {showAllActivities ? (
+                                <>
+                                  <ChevronDown className="h-4 w-4 mr-1 rotate-180" />
+                                  View Less
+                                </>
+                              ) : (
+                                <>
+                                  <ChevronDown className="h-4 w-4 mr-1" />
+                                  View More
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="text-center py-12">
@@ -280,18 +602,25 @@ export default function AIPlacementCellPage() {
                   </CardHeader>
 
                   <CardContent className="relative z-10">
-                    <div className="grid grid-cols-3 gap-4 text-center">
+                    <div className="grid grid-cols-2 gap-4 text-center mb-4">
                       <div className="p-4 rounded-lg bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-gray-200 dark:border-gray-700">
-                        <p className="text-3xl font-bold text-red-600 dark:text-red-400">{stats.rejections}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Rejections</p>
+                        <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">{stats.applications}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Applications</p>
                       </div>
+                      <div className="p-4 rounded-lg bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-gray-200 dark:border-gray-700">
+                        <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{stats.inProgress}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">In Progress</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 text-center">
                       <div className="p-4 rounded-lg bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-gray-200 dark:border-gray-700">
                         <p className="text-3xl font-bold text-green-600 dark:text-green-400">{stats.acceptances}</p>
                         <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Acceptances</p>
                       </div>
                       <div className="p-4 rounded-lg bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-gray-200 dark:border-gray-700">
-                        <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{stats.inProgress}</p>
-                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">In Progress</p>
+                        <p className="text-3xl font-bold text-red-600 dark:text-red-400">{stats.rejections}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Rejections</p>
                       </div>
                     </div>
 
@@ -319,7 +648,15 @@ export default function AIPlacementCellPage() {
                   <div className="absolute inset-0 bg-white/30 dark:bg-slate-900/50 rounded-xl" />
 
                   <CardHeader className="relative z-10">
-                    <CardTitle className="text-2xl font-bold">Opportunities Matched Online</CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-2xl font-bold">Opportunities Matched Online</CardTitle>
+                      {resume && (
+                        <Badge className="bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100 flex items-center gap-1">
+                          <CheckCircle className="h-3 w-3" />
+                          <span>Personalized Matches</span>
+                        </Badge>
+                      )}
+                    </div>
                   </CardHeader>
 
                   <CardContent className="relative z-10">
@@ -385,8 +722,15 @@ export default function AIPlacementCellPage() {
                           </div>
 
                           <div className="mt-4 flex justify-end">
-                            <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white">
-                              Apply Now
+                            <Button
+                              size="sm"
+                              className="bg-amber-500 hover:bg-amber-600 text-white"
+                              onClick={() => handleOpenApplicationDialog(opportunity.id)}
+                              disabled={opportunity.status === "applied" || opportunity.status === "in-progress"}
+                            >
+                              {opportunity.status === "applied" || opportunity.status === "in-progress"
+                                ? "Applied"
+                                : "Apply Now"}
                             </Button>
                           </div>
                         </div>
@@ -495,8 +839,15 @@ export default function AIPlacementCellPage() {
                               <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-800 dark:text-emerald-100">
                                 Company Reached Out
                               </Badge>
-                              <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white">
-                                Respond
+                              <Button
+                                size="sm"
+                                className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                                onClick={() => handleOpenApplicationDialog(opportunity.id)}
+                                disabled={opportunity.status === "applied" || opportunity.status === "in-progress"}
+                              >
+                                {opportunity.status === "applied" || opportunity.status === "in-progress"
+                                  ? "Applied"
+                                  : "Respond"}
                               </Button>
                             </div>
                           </div>
@@ -716,7 +1067,15 @@ export default function AIPlacementCellPage() {
                               )}
                             </div>
 
-                            <Button className="bg-purple-600 hover:bg-purple-700 text-white">Apply Now</Button>
+                            <Button
+                              className="bg-purple-600 hover:bg-purple-700 text-white"
+                              onClick={() => handleOpenApplicationDialog(opportunity.id)}
+                              disabled={opportunity.status === "applied" || opportunity.status === "in-progress"}
+                            >
+                              {opportunity.status === "applied" || opportunity.status === "in-progress"
+                                ? "Applied"
+                                : "Apply Now"}
+                            </Button>
                           </div>
                         </div>
                       ))
@@ -733,9 +1092,286 @@ export default function AIPlacementCellPage() {
                 </CardContent>
               </Card>
             </TabsContent>
+
+            {/* Resume Tab */}
+            <TabsContent value="resume" className="mt-0">
+              <Card className="overflow-hidden border-none shadow-xl backdrop-blur-md relative">
+                <div className="absolute inset-0 bg-gradient-to-br from-cyan-400/40 to-cyan-600/40 dark:from-cyan-600/30 dark:to-cyan-800/30 rounded-xl" />
+                <div className="absolute inset-0 bg-white/30 dark:bg-slate-900/50 rounded-xl" />
+
+                <CardHeader className="relative z-10">
+                  <CardTitle className="text-2xl font-bold">Resume Management</CardTitle>
+                </CardHeader>
+
+                <CardContent className="relative z-10">
+                  <div className="p-6 rounded-lg bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-gray-200 dark:border-gray-700">
+                    {!resume && !isUploading ? (
+                      <div className="text-center py-12">
+                        <FileText className="h-16 w-16 mx-auto text-cyan-500/50 mb-6" />
+                        <h3 className="text-xl font-medium dark:text-white mb-3">Upload Your Resume</h3>
+                        <p className="text-gray-600 dark:text-gray-300 mb-6 max-w-md mx-auto">
+                          Upload your resume to improve job matching and allow companies to find you more easily. We
+                          accept PDF files up to 5MB.
+                        </p>
+                        <div className="flex flex-col items-center gap-4">
+                          <input
+                            type="file"
+                            ref={fileInputRef}
+                            accept="application/pdf"
+                            className="hidden"
+                            onChange={handleFileUpload}
+                          />
+                          <Button
+                            onClick={triggerFileInput}
+                            className="bg-cyan-600 hover:bg-cyan-700 text-white flex items-center gap-2"
+                          >
+                            <Upload className="h-4 w-4" />
+                            <span>Upload Resume</span>
+                          </Button>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">Supported format: PDF (Max 5MB)</p>
+                        </div>
+                      </div>
+                    ) : isUploading ? (
+                      <div className="text-center py-12">
+                        <h3 className="text-xl font-medium dark:text-white mb-6">Uploading Resume...</h3>
+                        <div className="max-w-md mx-auto mb-4">
+                          <Progress value={uploadProgress} className="h-2" />
+                        </div>
+                        <p className="text-gray-600 dark:text-gray-300">{uploadProgress}% Complete</p>
+                      </div>
+                    ) : (
+                      <div className="py-6">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                          <div className="flex items-center gap-4">
+                            <div className="w-16 h-16 flex-shrink-0 bg-cyan-100 dark:bg-cyan-900/30 rounded-lg flex items-center justify-center">
+                              <FileText className="h-8 w-8 text-cyan-600 dark:text-cyan-400" />
+                            </div>
+                            <div>
+                              <h3 className="text-xl font-medium dark:text-white">{resume.name}</h3>
+                              <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                                {formatFileSize(resume.size)} • Uploaded {new Date().toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+                              <DialogTrigger asChild>
+                                <Button variant="outline" size="sm" className="flex items-center gap-1">
+                                  <Eye className="h-4 w-4" />
+                                  <span>Preview</span>
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent className="max-w-4xl h-[80vh]">
+                                <DialogHeader>
+                                  <DialogTitle>Resume Preview</DialogTitle>
+                                  <DialogDescription>
+                                    {resume.name} • {formatFileSize(resume.size)}
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <div className="flex-1 h-full mt-4">
+                                  <iframe
+                                    src={resume.url}
+                                    className="w-full h-[calc(80vh-120px)]"
+                                    title="Resume Preview"
+                                  />
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex items-center gap-1 text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-900/50 dark:hover:bg-red-950/30"
+                              onClick={handleDeleteResume}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span>Delete</span>
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="flex items-center gap-1 bg-cyan-600 hover:bg-cyan-700 text-white"
+                              onClick={triggerFileInput}
+                            >
+                              <FileUp className="h-4 w-4" />
+                              <span>Replace</span>
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-6">
+                          <div className="p-4 rounded-lg bg-cyan-50 dark:bg-cyan-900/20 border border-cyan-200 dark:border-cyan-800/30">
+                            <h4 className="font-medium text-cyan-800 dark:text-cyan-300 mb-2 flex items-center gap-2">
+                              <Sparkles className="h-4 w-4" />
+                              AI Resume Analysis
+                            </h4>
+                            <p className="text-cyan-700 dark:text-cyan-400 text-sm">
+                              Our AI has analyzed your resume and found it to be a good match for 15 opportunities in
+                              your area. Your resume highlights strong skills in web development and data analysis.
+                            </p>
+                          </div>
+
+                          <div>
+                            <h4 className="font-medium dark:text-white mb-3">Resume Optimization Tips</h4>
+                            <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
+                              <li className="flex items-start gap-2">
+                                <div className="mt-0.5 h-4 w-4 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+                                  <span className="text-amber-600 dark:text-amber-400 text-xs">!</span>
+                                </div>
+                                <span>Consider adding more specific achievements with measurable results</span>
+                              </li>
+                              <li className="flex items-start gap-2">
+                                <div className="mt-0.5 h-4 w-4 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+                                  <span className="text-amber-600 dark:text-amber-400 text-xs">!</span>
+                                </div>
+                                <span>Your resume could benefit from more industry-specific keywords</span>
+                              </li>
+                              <li className="flex items-start gap-2">
+                                <div className="mt-0.5 h-4 w-4 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+                                  <span className="text-green-600 dark:text-green-400 text-xs">✓</span>
+                                </div>
+                                <span>Good job highlighting your technical skills and certifications</span>
+                              </li>
+                            </ul>
+                          </div>
+
+                          <div className="flex justify-end">
+                            <Button className="bg-cyan-600 hover:bg-cyan-700 text-white">
+                              Get AI Resume Improvement
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
           </Tabs>
         </div>
       </main>
+
+      {/* Application Dialog */}
+      <Dialog open={applicationDialogOpen} onOpenChange={setApplicationDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Apply for Position</DialogTitle>
+            <DialogDescription>
+              {currentJobId && opportunities.find((job) => job.id === currentJobId)?.title} at{" "}
+              {currentJobId && opportunities.find((job) => job.id === currentJobId)?.company}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmitApplication} className="space-y-4 mt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Full Name *</Label>
+                <Input
+                  id="name"
+                  name="name"
+                  value={applicationForm.name}
+                  onChange={handleApplicationFormChange}
+                  placeholder="Enter your full name"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email">Email Address *</Label>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  value={applicationForm.email}
+                  onChange={handleApplicationFormChange}
+                  placeholder="Enter your email address"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone Number *</Label>
+                <Input
+                  id="phone"
+                  name="phone"
+                  value={applicationForm.phone}
+                  onChange={handleApplicationFormChange}
+                  placeholder="Enter your phone number"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="availability">Availability</Label>
+                <Input
+                  id="availability"
+                  name="availability"
+                  value={applicationForm.availability}
+                  onChange={handleApplicationFormChange}
+                  placeholder="e.g. Immediate, 2 weeks notice"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="expectedSalary">Expected Salary</Label>
+              <Input
+                id="expectedSalary"
+                name="expectedSalary"
+                value={applicationForm.expectedSalary}
+                onChange={handleApplicationFormChange}
+                placeholder="e.g. $80,000 - $100,000 per year"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="coverLetter">Cover Letter *</Label>
+              <Textarea
+                id="coverLetter"
+                name="coverLetter"
+                value={applicationForm.coverLetter}
+                onChange={handleApplicationFormChange}
+                placeholder="Write a brief cover letter explaining why you're a good fit for this position"
+                className="min-h-[120px]"
+                required
+              />
+            </div>
+
+            <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/30">
+              <div className="flex items-start gap-3">
+                <div className="mt-1">
+                  <CheckCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-blue-800 dark:text-blue-300 mb-1">Resume Attached</h4>
+                  <p className="text-sm text-blue-700 dark:text-blue-400">
+                    Your resume ({resume?.name}) will be automatically attached to this application.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setApplicationDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="bg-purple-600 hover:bg-purple-700" disabled={isSubmittingApplication}>
+                {isSubmittingApplication ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Send className="mr-2 h-4 w-4" />
+                    Submit Application
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Footer />
     </div>
